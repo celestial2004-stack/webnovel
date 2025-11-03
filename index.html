@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Criador de Visual Novel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        html, body {
+            height: 100%;
+            font-family: 'Inter', sans-serif;
+        }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap');
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+
+    <!-- View: Dashboard de Projetos -->
+    <div id="dashboard-view">
+        <header class="bg-gray-800 shadow-md p-4">
+            <h1 class="text-2xl font-bold text-center">Criador de Visual Novel</h1>
+        </header>
+        <main class="p-8">
+            <div class="text-center mb-8">
+                <button id="create-new-project-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg text-lg transition-transform transform hover:scale-105" title="Comece a criar sua história">
+                    &#10024; Criar Novo Projeto
+                </button>
+            </div>
+            <div id="projects-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                <!-- Cards de projeto serão inseridos aqui via JS -->
+            </div>
+        </main>
+    </div>
+
+    <!-- View: Editor de VN (inicialmente oculto) -->
+    <div id="editor-view" class="hidden flex flex-col h-screen">
+        <header class="bg-gray-800 shadow-md p-4 flex justify-between items-center z-10">
+            <div>
+                <button id="back-to-dashboard-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded" title="Voltar para a lista de projetos">
+                    &larr; Meus Projetos
+                </button>
+            </div>
+            <h2 id="editor-project-title" class="text-xl font-bold"></h2>
+            <div>
+                <button id="preview-game-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded" title="Testar o jogo em uma janela de pré-visualização">
+                    ▶ Testar Jogo
+                </button>
+            </div>
+        </header>
+
+        <div class="flex-grow flex overflow-hidden">
+            <!-- Coluna 1: Biblioteca -->
+            <aside class="w-1/4 bg-gray-800 p-4 overflow-y-auto border-r border-gray-700">
+                <div id="assets-panel">
+                    <h3 class="text-lg font-bold mb-4 border-b border-gray-600 pb-2">Recursos (Assets)</h3>
+                    <div class="mb-4">
+                        <h4 class="font-semibold mb-2">Planos de Fundo</h4>
+                        <button class="w-full bg-indigo-500 hover:bg-indigo-600 p-2 rounded mb-2 text-sm" title="Carregar imagem de fundo (JPG, PNG, etc.)">Carregar Fundo</button>
+                        <div id="backgrounds-gallery" class="grid grid-cols-3 gap-2"></div>
+                    </div>
+                    <div class="mb-4">
+                        <h4 class="font-semibold mb-2">Personagens</h4>
+                        <button class="w-full bg-indigo-500 hover:bg-indigo-600 p-2 rounded mb-2 text-sm" title="Carregar imagem de personagem (idealmente com fundo transparente)">Carregar Personagem</button>
+                        <div id="characters-gallery" class="grid grid-cols-3 gap-2"></div>
+                    </div>
+                    <div>
+                        <h4 class="font-semibold mb-2">Áudios</h4>
+                        <button class="w-full bg-indigo-500 hover:bg-indigo-600 p-2 rounded mb-2 text-sm" title="Carregar arquivo de áudio (MP3, WAV, etc.)">Carregar Áudio</button>
+                        <ul id="audio-list"></ul>
+                    </div>
+                </div>
+                <div id="scenes-panel" class="mt-6">
+                    <h3 class="text-lg font-bold mb-4 border-b border-gray-600 pb-2">Cenas da História</h3>
+                    <button class="w-full bg-purple-600 hover:bg-purple-700 p-2 rounded mb-2 text-sm" title="Adicionar um novo bloco de eventos à sua história">[+ Adicionar Cena]</button>
+                    <ul id="scenes-list" class="space-y-2"></ul>
+                </div>
+            </aside>
+
+            <!-- Coluna 2: Roteiro -->
+            <main class="w-1/2 bg-gray-700 p-6 overflow-y-auto">
+                <h3 class="text-xl font-bold mb-4">Editor de Cena: <span id="current-scene-name">Nenhuma selecionada</span></h3>
+                <div id="scene-editor-content" class="bg-gray-800 p-4 rounded-lg">
+                    <p class="text-gray-400">Selecione ou crie uma cena na coluna à esquerda para começar.</p>
+                </div>
+            </main>
+
+            <!-- Coluna 3: Palco -->
+            <aside class="w-1/4 bg-black flex items-center justify-center p-4">
+                <div id="live-preview" class="w-full aspect-video bg-gray-600 relative overflow-hidden rounded-lg shadow-inner">
+                    <p class="text-center text-gray-400 p-4">Pré-visualização ao Vivo</p>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="game-player-modal" class="hidden fixed inset-0 bg-black flex items-center justify-center z-50">
+        <div id="game-player-container" class="relative w-full max-w-4xl aspect-video bg-gray-800 text-white"></div>
+        <button id="close-game-player-btn" class="absolute top-4 right-4 bg-red-600 hover:bg-red-700 text-white font-bold p-2 rounded-full w-8 h-8 flex items-center justify-center" title="Fechar Jogo">&times;</button>
+    </div>
+
+    <div id="new-project-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40">
+        <div class="bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-md">
+            <h2 class="text-xl font-bold mb-4">Criar Novo Projeto</h2>
+            <label for="project-title-input" class="block mb-2">Título do Projeto:</label>
+            <input type="text" id="project-title-input" class="w-full bg-gray-700 text-white p-2 rounded mb-4" placeholder="Ex: A Jornada do Herói">
+            <div class="text-right">
+                <button id="cancel-project-creation-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded mr-2">Cancelar</button>
+                <button id="confirm-project-creation-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded">Criar</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
