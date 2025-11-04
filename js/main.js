@@ -61,7 +61,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     title,
                     createdAt: new Date().toISOString(),
                     scenes: [],
-                    assets: { backgrounds: [], characters: [], audio: [] }
+                    // CORREÇÃO: Estrutura de assets.characters atualizada
+                    assets: {
+                        backgrounds: [],
+                        characters: [], // Agora um array para objetos de personagem
+                        audio: []
+                    }
                 };
                 saveProject(newProject);
                 newProjectModal.classList.add('hidden');
@@ -120,15 +125,59 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         scenesListEl.addEventListener('click', (event) => {
-            const sceneItem = event.target.closest('[data-scene-id]');
-            if (sceneItem) {
+            const target = event.target;
+            // Lógica de seleção de cena
+            const sceneItem = target.closest('[data-scene-id]');
+            if (sceneItem && !target.classList.contains('delete-scene-btn')) {
                 const sceneId = sceneItem.dataset.sceneId;
                 currentEditingScene = currentEditingProject.scenes.find(s => s.id === sceneId);
                 renderSceneEditor(currentEditingScene, currentEditingProject.assets, currentEditingProject.scenes);
-                updateLivePreview(currentEditingScene, currentEditingProject.assets);
+                updateLivePreview(currentEditingScene, currentEditingProject.assets, 0);
                 document.querySelectorAll('#scenes-list li').forEach(li => li.classList.remove('bg-purple-800'));
                 sceneItem.classList.add('bg-purple-800');
             }
+            // Lógica de exclusão de cena
+            if (target.classList.contains('delete-scene-btn')) {
+                const sceneId = target.dataset.sceneId;
+                if (confirm('Tem certeza que deseja excluir esta cena?')) {
+                    currentEditingProject.scenes = currentEditingProject.scenes.filter(s => s.id !== sceneId);
+                    updateProject(currentEditingProject);
+                    renderScenesList(currentEditingProject.scenes);
+                    // Limpa o editor se a cena excluída era a que estava sendo editada
+                    if (currentEditingScene?.id === sceneId) {
+                        currentEditingScene = null;
+                        renderSceneEditor(null, {}, []);
+                        updateLivePreview(null, {});
+                    }
+                }
+            }
+        });
+
+        // --- Lógica de Drag-and-Drop para Cenas ---
+        let draggedSceneId = null;
+        scenesListEl.addEventListener('dragstart', (event) => {
+            draggedSceneId = event.target.closest('[data-scene-id]').dataset.sceneId;
+        });
+
+        scenesListEl.addEventListener('dragover', (event) => {
+            event.preventDefault(); // Necessário para permitir o drop
+        });
+
+        scenesListEl.addEventListener('drop', (event) => {
+            event.preventDefault();
+            const targetSceneItem = event.target.closest('[data-scene-id]');
+            if (!targetSceneItem || targetSceneItem.dataset.sceneId === draggedSceneId) return;
+
+            const scenes = currentEditingProject.scenes;
+            const draggedIndex = scenes.findIndex(s => s.id === draggedSceneId);
+            const targetIndex = scenes.findIndex(s => s.id === targetSceneItem.dataset.sceneId);
+
+            // Remove o item arrastado e o insere na nova posição
+            const [draggedItem] = scenes.splice(draggedIndex, 1);
+            scenes.splice(targetIndex, 0, draggedItem);
+
+            updateProject(currentEditingProject);
+            renderScenesList(scenes);
         });
 
         sceneEditorContent.addEventListener('click', (event) => {
@@ -158,7 +207,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (structuralChange) {
                 updateProject(currentEditingProject);
                 renderSceneEditor(currentEditingScene, currentEditingProject.assets, currentEditingProject.scenes);
-                updateLivePreview(currentEditingScene, currentEditingProject.assets);
+                updateLivePreview(currentEditingScene, currentEditingProject.assets, currentEditingScene.actions.length - 1);
             }
         });
 
@@ -169,7 +218,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const action = currentEditingScene.actions[actionIndex];
             const propertyName = target.dataset.propertyName;
+
             if (propertyName) {
+                // Lógica para salvar propriedades normais e aninhadas
                 const match = propertyName.match(/(\w+)\[(\d+)\]\.(\w+)/);
                 if (match) {
                     const [, collection, index, prop] = match;
@@ -178,35 +229,176 @@ document.addEventListener('DOMContentLoaded', () => {
                     action[propertyName] = target.value;
                 }
                 updateProject(currentEditingProject);
-                updateLivePreview(currentEditingScene, currentEditingProject.assets);
+                updateLivePreview(currentEditingScene, currentEditingProject.assets, parseInt(actionIndex));
+            }
+
+            // CORREÇÃO: Lógica para dropdowns dependentes
+            if (target.dataset.action === 'select-char') {
+                // Limpa a expressão selecionada para evitar inconsistências
+                action.expressionId = '';
+                updateProject(currentEditingProject);
+                // Re-renderiza o editor para atualizar o dropdown de expressões
+                renderSceneEditor(currentEditingScene, currentEditingProject.assets, currentEditingProject.scenes);
             }
         }
 
+        // CORREÇÃO: Eventos de salvamento otimizados
         sceneEditorContent.addEventListener('change', handleActionInputChange);
-        sceneEditorContent.addEventListener('keyup', handleActionInputChange);
+        sceneEditorContent.addEventListener('blur', handleActionInputChange, true);
 
-        function handleFileUpload(fileType, assetCategory) {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = fileType;
-            input.onchange = (event) => {
-                const file = event.target.files[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const newAsset = { id: `${assetCategory}_${Date.now()}`, name: file.name, data: e.target.result };
-                    currentEditingProject.assets[assetCategory].push(newAsset);
-                    updateProject(currentEditingProject);
-                    renderAssetGalleries(currentEditingProject.assets);
-                };
-                reader.readAsDataURL(file);
-            };
-            input.click();
+        // --- Lógica de Drag-and-Drop para Ações ---
+        let draggedActionIndex = null;
+        sceneEditorContent.addEventListener('dragstart', (event) => {
+            const target = event.target.closest('[data-action-index]');
+            if(target) {
+                draggedActionIndex = target.dataset.actionIndex;
+                event.dataTransfer.effectAllowed = 'move';
+            }
+        });
+
+        sceneEditorContent.addEventListener('dragover', (event) => {
+            event.preventDefault();
+        });
+
+        sceneEditorContent.addEventListener('drop', (event) => {
+            event.preventDefault();
+            const targetActionItem = event.target.closest('[data-action-index]');
+            if (!targetActionItem || targetActionItem.dataset.actionIndex === draggedActionIndex) {
+                 draggedActionIndex = null;
+                 return;
+            }
+
+            const actions = currentEditingScene.actions;
+            const targetIndex = targetActionItem.dataset.actionIndex;
+
+            const [draggedItem] = actions.splice(draggedActionIndex, 1);
+            actions.splice(targetIndex, 0, draggedItem);
+
+            updateProject(currentEditingProject);
+            renderSceneEditor(currentEditingScene, currentEditingProject.assets, currentEditingProject.scenes);
+            draggedActionIndex = null;
+        });
+
+        // --- Lógica de Upload e Exclusão de Recursos ---
+        const assetsPanel = document.getElementById('assets-panel');
+
+        function uploadFileAsBase64(file, callback) {
+            const reader = new FileReader();
+            reader.onload = (e) => callback(e.target.result);
+            reader.readAsDataURL(file);
         }
 
-        uploadBackgroundBtn.addEventListener('click', () => handleFileUpload('image/*', 'backgrounds'));
-        uploadCharacterBtn.addEventListener('click', () => handleFileUpload('image/*', 'characters'));
-        uploadAudioBtn.addEventListener('click', () => handleFileUpload('audio/*', 'audio'));
+        uploadBackgroundBtn.addEventListener('click', () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.onchange = e => {
+                const file = e.target.files[0];
+                if (!file) return;
+                uploadFileAsBase64(file, base64Data => {
+                    const newBg = { id: `bg_${Date.now()}`, name: file.name, data: base64Data };
+                    currentEditingProject.assets.backgrounds.push(newBg);
+                    updateProject(currentEditingProject);
+                    renderAssetGalleries(currentEditingProject.assets);
+                });
+            };
+            input.click();
+        });
+
+        // CORREÇÃO: Nova lógica de upload de personagem/expressão
+        uploadCharacterBtn.addEventListener('click', () => {
+            const charName = prompt("Digite o nome do NOVO personagem:");
+            if (!charName?.trim()) return;
+
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.multiple = true; // Permite selecionar várias expressões de uma vez
+            input.onchange = e => {
+                const files = e.target.files;
+                if (!files.length) return;
+
+                const newCharacter = {
+                    id: `char_${Date.now()}`,
+                    name: charName.trim(),
+                    expressions: []
+                };
+
+                Array.from(files).forEach(file => {
+                    uploadFileAsBase64(file, base64Data => {
+                        const exprName = file.name.split('.').slice(0, -1).join('.');
+                        newCharacter.expressions.push({
+                            id: `expr_${Date.now()}_${Math.random()}`,
+                            name: exprName,
+                            data: base64Data
+                        });
+                        // Salva e re-renderiza após a última imagem ser processada
+                        if (newCharacter.expressions.length === files.length) {
+                             currentEditingProject.assets.characters.push(newCharacter);
+                             updateProject(currentEditingProject);
+                             renderAssetGalleries(currentEditingProject.assets);
+                        }
+                    });
+                });
+            };
+            input.click();
+        });
+
+        assetsPanel.addEventListener('click', (event) => {
+            const target = event.target;
+
+            // Adicionar nova expressão a um personagem existente
+            if (target.classList.contains('add-expression-btn')) {
+                const charId = target.dataset.charId;
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'image/*';
+                input.onchange = e => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    uploadFileAsBase64(file, base64Data => {
+                        const character = currentEditingProject.assets.characters.find(c => c.id === charId);
+                        const exprName = file.name.split('.').slice(0, -1).join('.');
+                        character.expressions.push({ id: `expr_${Date.now()}`, name: exprName, data: base64Data });
+                        updateProject(currentEditingProject);
+                        renderAssetGalleries(currentEditingProject.assets);
+                    });
+                };
+                input.click();
+            }
+
+            // Excluir um recurso (fundo)
+            if (target.classList.contains('delete-asset-btn')) {
+                const assetId = target.dataset.assetId;
+                if (confirm('Tem certeza que deseja excluir este fundo?')) {
+                    currentEditingProject.assets.backgrounds = currentEditingProject.assets.backgrounds.filter(bg => bg.id !== assetId);
+                    updateProject(currentEditingProject);
+                    renderAssetGalleries(currentEditingProject.assets);
+                }
+            }
+
+            // Excluir um personagem inteiro
+             if (target.classList.contains('delete-character-btn')) {
+                const charId = target.dataset.charId;
+                if (confirm('Tem certeza que deseja excluir este personagem e todas as suas expressões?')) {
+                    currentEditingProject.assets.characters = currentEditingProject.assets.characters.filter(c => c.id !== charId);
+                    updateProject(currentEditingProject);
+                    renderAssetGalleries(currentEditingProject.assets);
+                }
+            }
+
+            // Excluir uma expressão específica
+            if (target.classList.contains('delete-expression-btn')) {
+                const charId = target.dataset.charId;
+                const exprId = target.dataset.exprId;
+                 if (confirm('Tem certeza que deseja excluir esta expressão?')) {
+                    const character = currentEditingProject.assets.characters.find(c => c.id === charId);
+                    character.expressions = character.expressions.filter(e => e.id !== exprId);
+                    updateProject(currentEditingProject);
+                    renderAssetGalleries(currentEditingProject.assets);
+                }
+            }
+        });
 
         previewGameBtn.addEventListener('click', () => {
             if (currentEditingProject) startGame(currentEditingProject);
